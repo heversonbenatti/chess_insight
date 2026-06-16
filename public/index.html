@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chess Analyzer</title>
+<style>
+  :root {
+    --bg:       #0d0d0d;
+    --surface:  #161616;
+    --border:   #2a2a2a;
+    --accent:   #c8a84b;
+    --accent2:  #7b5ea7;
+    --text:     #e8e8e8;
+    --muted:    #666;
+    --win:      #4caf7d;
+    --loss:     #e05252;
+    --draw:     #888;
+    --white-piece: #f0d9b5;
+    --black-piece: #b58863;
+    --radius:   6px;
+    --mono:     'JetBrains Mono', 'Fira Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header svg { flex-shrink: 0; }
+  .header-title { font-size: 18px; font-weight: 700; letter-spacing: -.3px; }
+  .header-title span { color: var(--accent); }
+
+  /* ── Layout ── */
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    min-height: calc(100vh - 61px);
+  }
+
+  /* ── Sidebar (filtros) ── */
+  aside {
+    border-right: 1px solid var(--border);
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    position: sticky;
+    top: 0;
+    height: calc(100vh - 61px);
+    overflow-y: auto;
+  }
+
+  .filter-section { display: flex; flex-direction: column; gap: 8px; }
+  .filter-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--muted);
+  }
+
+  select, input[type="text"], input[type="date"], input[type="number"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 8px 10px;
+    font-size: 13px;
+    width: 100%;
+    outline: none;
+    transition: border-color .15s;
+    font-family: inherit;
+  }
+  select:focus, input:focus { border-color: var(--accent); }
+  select option { background: #1a1a1a; }
+
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  .btn-apply {
+    background: var(--accent);
+    color: #0d0d0d;
+    border: none;
+    border-radius: var(--radius);
+    padding: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+    letter-spacing: .02em;
+    transition: opacity .15s;
+  }
+  .btn-apply:hover { opacity: .85; }
+
+  .btn-reset {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    width: 100%;
+    transition: color .15s, border-color .15s;
+  }
+  .btn-reset:hover { color: var(--text); border-color: var(--text); }
+
+  .divider { border: none; border-top: 1px solid var(--border); }
+
+  /* ── Main ── */
+  main { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
+
+  /* ── Stats cards ── */
+  .stats-row { display: flex; gap: 12px; flex-wrap: wrap; }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    min-width: 110px;
+    flex: 1;
+  }
+  .stat-card .val {
+    font-size: 26px;
+    font-weight: 800;
+    font-family: var(--mono);
+    letter-spacing: -.5px;
+    line-height: 1;
+  }
+  .stat-card .val.win  { color: var(--win); }
+  .stat-card .val.loss { color: var(--loss); }
+  .stat-card .val.draw { color: var(--draw); }
+  .stat-card .val.accent { color: var(--accent); }
+  .stat-card .lbl {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* ── Winrate bar ── */
+  .winrate-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .winrate-bar .bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .bar-track {
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+  }
+  .bar-win  { background: var(--win);  height: 100%; transition: width .4s; }
+  .bar-draw { background: var(--draw); height: 100%; transition: width .4s; }
+  .bar-loss { background: var(--loss); height: 100%; transition: width .4s; }
+
+  /* ── Table ── */
+  .table-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .table-title { font-size: 13px; font-weight: 600; }
+  .total-label { font-size: 12px; color: var(--muted); }
+
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead tr { border-bottom: 1px solid var(--border); }
+  th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid #1e1e1e;
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #1c1c1c; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--mono);
+  }
+  .badge-win  { background: #1a3326; color: var(--win); }
+  .badge-loss { background: #2e1515; color: var(--loss); }
+  .badge-draw { background: #222; color: var(--draw); }
+
+  .badge-class {
+    background: #1d1a27;
+    color: var(--accent2);
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .color-dot {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+  }
+  .dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .dot-white { background: var(--white-piece); border: 1px solid #888; }
+  .dot-black { background: var(--black-piece); }
+
+  .link-icon {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13px;
+    transition: color .15s;
+  }
+  .link-icon:hover { color: var(--accent); }
+
+  .rating-val { font-family: var(--mono); font-size: 13px; }
+
+  .opponent { font-size: 12px; color: var(--muted); }
+  .opponent strong { color: var(--text); }
+
+  .date-val { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+  /* ── Pagination ── */
+  .pagination {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  .btn-page {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--radius);
+    padding: 6px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color .15s;
+  }
+  .btn-page:hover:not(:disabled) { border-color: var(--accent); }
+  .btn-page:disabled { opacity: .3; cursor: default; }
+  .page-info { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+  /* ── Empty / loading ── */
+  .empty {
+    padding: 48px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .loading { color: var(--muted); font-size: 13px; padding: 48px; text-align: center; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+    <rect x="2" y="2" width="20" height="20" rx="2" stroke="#c8a84b" stroke-width="1.5"/>
+    <path d="M6 18V10M10 18V6M14 18V12M18 18V8" stroke="#c8a84b" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>
+  <span class="header-title">Chess<span>Analyzer</span></span>
+</header>
+
+<div class="layout">
+
+  <!-- Filtros -->
+  <aside>
+    <div class="filter-section">
+      <label class="filter-label">Jogador</label>
+      <select id="f-username"></select>
+    </div>
+
+    <hr class="divider">
+
+    <div class="filter-section">
+      <label class="filter-label">Tipo de partida</label>
+      <select id="f-class">
+        <option value="">Todos</option>
+        <option value="bullet">Bullet</option>
+        <option value="blitz">Blitz</option>
+        <option value="rapid">Rapid</option>
+        <option value="daily">Daily</option>
+      </select>
+    </div>
+
+    <div class="filter-section">
+      <label class="filter-label">Cor das peças</label>
+      <select id="f-color">
+        <option value="">Ambas</option>
+        <option value="white">Brancas ♔</option>
+        <option value="black">Pretas ♚</option>
+      </select>
+    </div>
+
+    <div class="filter-section">
+      <label class="filter-label">Resultado</label>
+      <select id="f-result">
+        <option value="">Todos</option>
+        <option value="win">Vitória</option>
+        <option value="loss">Derrota</option>
+        <option value="draw">Empate</option>
+      </select>
+    </div>
+
+    <hr class="divider">
+
+    <div class="filter-section">
+      <label class="filter-label">Período</label>
+      <input type="date" id="f-from" placeholder="De">
+      <input type="date" id="f-to" placeholder="Até">
+    </div>
+
+    <div class="filter-section">
+      <label class="filter-label">Rating do jogador</label>
+      <div class="row-2">
+        <input type="number" id="f-rmin" placeholder="Mín">
+        <input type="number" id="f-rmax" placeholder="Máx">
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <button class="btn-apply" onclick="applyFilters()">Aplicar filtros</button>
+    <button class="btn-reset" onclick="resetFilters()">Limpar filtros</button>
+  </aside>
+
+  <!-- Conteúdo -->
+  <main>
+    <!-- Stats -->
+    <div class="stats-row" id="stats-row">
+      <div class="stat-card"><div class="val accent" id="s-total">—</div><div class="lbl">Total</div></div>
+      <div class="stat-card"><div class="val win"    id="s-wins">—</div><div class="lbl">Vitórias</div></div>
+      <div class="stat-card"><div class="val loss"   id="s-losses">—</div><div class="lbl">Derrotas</div></div>
+      <div class="stat-card"><div class="val draw"   id="s-draws">—</div><div class="lbl">Empates</div></div>
+      <div class="stat-card"><div class="val accent" id="s-wr">—</div><div class="lbl">Win rate</div></div>
+    </div>
+
+    <div class="winrate-bar" id="wr-bar" style="display:none">
+      <div class="bar-label">
+        <span id="wr-lbl-win">—% vitórias</span>
+        <span id="wr-lbl-draw">—% empates</span>
+        <span id="wr-lbl-loss">—% derrotas</span>
+      </div>
+      <div class="bar-track">
+        <div class="bar-win"  id="bar-win"  style="width:0%"></div>
+        <div class="bar-draw" id="bar-draw" style="width:0%"></div>
+        <div class="bar-loss" id="bar-loss" style="width:0%"></div>
+      </div>
+    </div>
+
+    <!-- Tabela -->
+    <div class="table-header">
+      <span class="table-title">Partidas</span>
+      <span class="total-label" id="total-label"></span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Tipo</th>
+            <th>Cor</th>
+            <th>Adversário</th>
+            <th>Rating</th>
+            <th>Resultado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="games-body">
+          <tr><td colspan="7" class="loading">Selecione um jogador e aplique os filtros.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pagination" id="pagination" style="display:none">
+      <button class="btn-page" id="btn-prev" onclick="changePage(-1)">← Anterior</button>
+      <span class="page-info" id="page-info"></span>
+      <button class="btn-page" id="btn-next" onclick="changePage(1)">Próxima →</button>
+    </div>
+  </main>
+</div>
+
+<script>
+  const PAGE_SIZE = 50;
+  let currentPage = 0;
+  let currentTotal = 0;
+
+  // Carrega jogadores no select
+  async function loadPlayers() {
+    const res = await fetch('/api/players');
+    const players = await res.json();
+    const sel = document.getElementById('f-username');
+    players.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p;
+      opt.textContent = p;
+      sel.appendChild(opt);
+    });
+    if (players.length) applyFilters();
+  }
+
+  function getFilters() {
+    return {
+      username:   document.getElementById('f-username').value,
+      time_class: document.getElementById('f-class').value,
+      color:      document.getElementById('f-color').value,
+      result:     document.getElementById('f-result').value,
+      date_from:  document.getElementById('f-from').value,
+      date_to:    document.getElementById('f-to').value,
+      rating_min: document.getElementById('f-rmin').value,
+      rating_max: document.getElementById('f-rmax').value,
+    };
+  }
+
+  function buildQuery(filters, limit, offset) {
+    const p = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => { if (v) p.set(k, v); });
+    p.set('limit', limit);
+    p.set('offset', offset);
+    return p.toString();
+  }
+
+  async function applyFilters() {
+    currentPage = 0;
+    await loadGames();
+    await loadStats();
+  }
+
+  async function loadGames() {
+    const filters = getFilters();
+    if (!filters.username) return;
+
+    document.getElementById('games-body').innerHTML =
+      '<tr><td colspan="7" class="loading">Carregando…</td></tr>';
+
+    const qs = buildQuery(filters, PAGE_SIZE, currentPage * PAGE_SIZE);
+    const res = await fetch(`/api/games?${qs}`);
+    const { total, games } = await res.json();
+
+    currentTotal = total;
+    renderGames(games, filters.username);
+    renderPagination();
+    document.getElementById('total-label').textContent =
+      total ? `${total} partida${total !== 1 ? 's' : ''} encontrada${total !== 1 ? 's' : ''}` : '';
+  }
+
+  function renderGames(games, username) {
+    const tbody = document.getElementById('games-body');
+    if (!games.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">Nenhuma partida encontrada.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = games.map(g => {
+      const date = g.played_at
+        ? new Date(g.played_at * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+        : '—';
+
+      const isWhite  = g.player_color === 'white';
+      const opponent = isWhite ? g.black_username : g.white_username;
+      const oppRating = isWhite ? g.black_rating : g.white_rating;
+
+      const resultMap = { win: 'win', loss: 'loss', draw: 'draw' };
+      const labelMap  = { win: 'Vitória', loss: 'Derrota', draw: 'Empate' };
+      const r = resultMap[g.player_result] ?? 'draw';
+
+      const ecoName = g.eco
+        ? decodeURIComponent(g.eco.split('/').pop()).replace(/-/g, ' ')
+        : '';
+
+      return `<tr>
+        <td><span class="date-val">${date}</span></td>
+        <td><span class="badge-class">${g.time_class ?? '—'}</span></td>
+        <td>
+          <span class="color-dot">
+            <span class="dot ${isWhite ? 'dot-white' : 'dot-black'}"></span>
+            ${isWhite ? 'Brancas' : 'Pretas'}
+          </span>
+        </td>
+        <td>
+          <span class="opponent"><strong>${opponent ?? '—'}</strong>${oppRating ? ` <small>(${oppRating})</small>` : ''}</span>
+          ${ecoName ? `<br><small style="color:var(--muted);font-size:10px">${ecoName}</small>` : ''}
+        </td>
+        <td><span class="rating-val">${g.player_rating ?? '—'}</span></td>
+        <td><span class="badge badge-${r}">${labelMap[r]}</span></td>
+        <td><a href="${g.url}" target="_blank" class="link-icon" title="Ver no Chess.com">↗</a></td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function loadStats() {
+    const { username } = getFilters();
+    if (!username) return;
+
+    // Usa os jogos filtrados p/ stats dinâmicas
+    const filters = getFilters();
+    const qs = buildQuery(filters, 9999, 0);
+    const res = await fetch(`/api/games?${qs}`);
+    const { total, games } = await res.json();
+
+    let wins = 0, losses = 0, draws = 0;
+    games.forEach(g => {
+      if (g.player_result === 'win') wins++;
+      else if (g.player_result === 'loss') losses++;
+      else draws++;
+    });
+
+    document.getElementById('s-total').textContent  = total;
+    document.getElementById('s-wins').textContent   = wins;
+    document.getElementById('s-losses').textContent = losses;
+    document.getElementById('s-draws').textContent  = draws;
+    document.getElementById('s-wr').textContent     = total ? (wins / total * 100).toFixed(1) + '%' : '—';
+
+    // Barra
+    if (total > 0) {
+      const wp = (wins   / total * 100).toFixed(1);
+      const dp = (draws  / total * 100).toFixed(1);
+      const lp = (losses / total * 100).toFixed(1);
+      document.getElementById('bar-win').style.width  = wp + '%';
+      document.getElementById('bar-draw').style.width = dp + '%';
+      document.getElementById('bar-loss').style.width = lp + '%';
+      document.getElementById('wr-lbl-win').textContent  = `${wp}% vitórias`;
+      document.getElementById('wr-lbl-draw').textContent = `${dp}% empates`;
+      document.getElementById('wr-lbl-loss').textContent = `${lp}% derrotas`;
+      document.getElementById('wr-bar').style.display = '';
+    }
+  }
+
+  function renderPagination() {
+    const totalPages = Math.ceil(currentTotal / PAGE_SIZE);
+    const pag = document.getElementById('pagination');
+    if (totalPages <= 1) { pag.style.display = 'none'; return; }
+    pag.style.display = 'flex';
+    document.getElementById('page-info').textContent =
+      `Pág. ${currentPage + 1} / ${totalPages}`;
+    document.getElementById('btn-prev').disabled = currentPage === 0;
+    document.getElementById('btn-next').disabled = currentPage >= totalPages - 1;
+  }
+
+  async function changePage(dir) {
+    currentPage += dir;
+    await loadGames();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function resetFilters() {
+    ['f-class','f-color','f-result'].forEach(id => document.getElementById(id).value = '');
+    ['f-from','f-to','f-rmin','f-rmax'].forEach(id => document.getElementById(id).value = '');
+    applyFilters();
+  }
+
+  // Enter nos inputs também aplica
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter') applyFilters();
+  });
+
+  loadPlayers();
+</script>
+</body>
+</html>
