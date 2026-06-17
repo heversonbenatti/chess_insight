@@ -290,6 +290,18 @@
   .btn-page:disabled { opacity: .3; cursor: default; }
   .page-info { font-size: 12px; color: var(--muted); font-family: var(--mono); }
 
+  .btn-view-game {
+    background: transparent;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    color: var(--accent);
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  .btn-view-game:hover { background: rgba(200,168,75,.12); }
+
   /* ── Empty / loading ── */
   .empty {
     padding: 48px;
@@ -303,6 +315,73 @@
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .explorer {
+    display: grid;
+    grid-template-columns: minmax(320px, 460px) 1fr;
+    gap: 18px;
+    margin-bottom: 20px;
+  }
+  .panel-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+  }
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .panel-title {
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(8, 44px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .square {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    user-select: none;
+  }
+  .square.light { background: #f5f1de; }
+  .square.dark { background: #b58863; }
+  .square.active { outline: 2px solid var(--accent); }
+  .moves-list, .insights-list {
+    display: grid;
+    gap: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  .move-item, .insight-item {
+    background: #111;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    text-align: left;
+    transition: background .15s, border-color .15s;
+  }
+  .move-item:hover, .insight-item:hover { background: #1c1c1c; border-color: var(--accent); }
+  .move-item.active, .insight-item.active { background: #1b2732; border-color: var(--accent); }
+  .move-item small, .insight-item small { display: block; color: var(--muted); margin-top: 4px; font-size: 11px; }
+  .insight-group { display: flex; flex-direction: column; gap: 12px; }
+  .insight-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .insight-card h3 { margin-bottom: 12px; font-size: 13px; font-weight: 700; }
+  .game-summary { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .game-summary span { background: #111; border-radius: 999px; padding: 5px 10px; }
 </style>
 </head>
 <body>
@@ -402,6 +481,30 @@
       </div>
     </div>
 
+    <div class="explorer" id="explorer" style="display:none">
+      <section class="panel-card">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Tabuleiro</div>
+            <small id="board-title" class="move-meta">Selecione uma partida para ver o tabuleiro.</small>
+          </div>
+        </div>
+        <div class="board" id="board"></div>
+        <div class="moves-list" id="moves-list"></div>
+      </section>
+
+      <section class="insight-group">
+        <section class="insight-card">
+          <h3 id="player-moves-title">Movimentos mais jogados</h3>
+          <div class="insights-list" id="player-moves"></div>
+        </section>
+        <section class="insight-card">
+          <h3 id="opponent-moves-title">Respostas do adversário</h3>
+          <div class="insights-list" id="opponent-moves"></div>
+        </section>
+      </section>
+    </div>
+
     <!-- Tabela -->
     <div class="table-header">
       <span class="table-title">Partidas</span>
@@ -418,7 +521,7 @@
             <th>Adversário</th>
             <th>Rating</th>
             <th>Resultado</th>
-            <th></th>
+            <th>Ações</th>
           </tr>
         </thead>
         <tbody id="games-body">
@@ -477,8 +580,11 @@
 
   async function applyFilters() {
     currentPage = 0;
+    moveSequence = [];
     await loadGames();
     await loadStats();
+    document.getElementById('explorer').style.display = '';
+    loadPositionMoves();
   }
 
   async function loadGames() {
@@ -538,7 +644,9 @@
         </td>
         <td><span class="rating-val">${g.player_rating ?? '—'}</span></td>
         <td><span class="badge badge-${r}">${labelMap[r]}</span></td>
-        <td><a href="${g.url}" target="_blank" class="link-icon" title="Ver no Chess.com">↗</a></td>
+        <td>
+          <a href="${g.url}" target="_blank" class="link-icon" title="Ver no Chess.com">↗</a>
+        </td>
       </tr>`;
     }).join('');
   }
@@ -596,6 +704,127 @@
     currentPage += dir;
     await loadGames();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  let moveSequence = [];
+
+  function boardPieceSymbol(piece) {
+    const symbols = {
+      p: '♟', r: '♜', n: '♞', b: '♝', q: '♛', k: '♚',
+      P: '♙', R: '♖', N: '♘', B: '♗', Q: '♕', K: '♔'
+    };
+    return symbols[piece] || '';
+  }
+
+  function renderBoardFromFen(fen) {
+    const boardEl = document.getElementById('board');
+    boardEl.innerHTML = '';
+    if (!fen) {
+      boardEl.innerHTML = '<div class="empty">Posição indisponível</div>';
+      return;
+    }
+
+    const ranks = fen.split(' ')[0].split('/');
+    ranks.forEach((row, rowIndex) => {
+      let file = 0;
+      for (const ch of row) {
+        if (/\d/.test(ch)) {
+          const emptyCount = Number(ch);
+          for (let i = 0; i < emptyCount; i++) {
+            const square = document.createElement('div');
+            square.className = `square ${((rowIndex + file) % 2 === 0) ? 'light' : 'dark'}`;
+            boardEl.appendChild(square);
+            file += 1;
+          }
+          continue;
+        }
+        const square = document.createElement('div');
+        square.className = `square ${((rowIndex + file) % 2 === 0) ? 'light' : 'dark'}`;
+        square.textContent = boardPieceSymbol(ch);
+        boardEl.appendChild(square);
+        file += 1;
+      }
+    });
+  }
+
+  function renderBoardAtMove(moveIndex) {
+    if (!selectedGame) return;
+    renderBoardFromFen(selectedGame.fen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
+  }
+
+  function extractPgnMoves(pgn) {
+    return [];
+  }
+
+  function formatMoveLabel(move, index) {
+    if (index % 2 === 0) {
+      return `${Math.floor(index / 2) + 1}. ${move}`;
+    }
+    return move;
+  }
+
+  function renderGameMoves(moves) {
+    const movesList = document.getElementById('moves-list');
+    if (!moves.length) {
+      movesList.innerHTML = '<div class="empty">Nenhum movimento disponível.</div>';
+      return;
+    }
+
+    movesList.innerHTML = moves.map((move) => {
+      return `<div class="move-item" onclick="addMoveToSequence('${move}')">${move}</div>`;
+    }).join('');
+  }
+
+  function renderStatsList(containerId, items, emptyText) {
+    const container = document.getElementById(containerId);
+    if (!items.length) {
+      container.innerHTML = `<div class="empty">${emptyText}</div>`;
+      return;
+    }
+    container.innerHTML = items.map(item => `
+      <div class="insight-item" onclick="addMoveToSequence('${item.move}')">
+        <strong>${item.move}</strong>
+        <small>${item.count} partida${item.count !== 1 ? 's' : ''}</small>
+      </div>
+    `).join('');
+  }
+
+  async function loadPositionMoves() {
+    const username = document.getElementById('f-username').value;
+    const color = document.getElementById('f-color').value || '';
+    if (!username) return;
+
+    const res = await fetch(`/api/position-moves?username=${encodeURIComponent(username)}&color=${encodeURIComponent(color)}&moves=${encodeURIComponent(JSON.stringify(moveSequence))}`);
+    const data = await res.json();
+    if (!res.ok) {
+      console.error('Erro ao carregar posição:', data);
+      return;
+    }
+
+    renderBoardFromFen(data.fen);
+    renderGameMoves(data.next_moves);
+    
+    document.getElementById('player-moves-title').textContent = moveSequence.length === 0 
+      ? 'Movimentos mais jogados'
+      : `Movimentos mais jogados após ${moveSequence.join(' ')}`;
+    document.getElementById('opponent-moves-title').textContent = moveSequence.length === 0
+      ? 'Respostas do adversário'
+      : `Respostas do adversário para ${moveSequence[moveSequence.length - 1]}`;
+    
+    renderStatsList('player-moves', data.next_moves, 'Nenhum movimento encontrado.');
+    renderStatsList('opponent-moves', data.opponent_moves, 'Nenhuma resposta encontrada.');
+  }
+
+  function addMoveToSequence(move) {
+    moveSequence.push(move);
+    loadPositionMoves();
+  }
+
+  function undoMove() {
+    if (moveSequence.length > 0) {
+      moveSequence.pop();
+      loadPositionMoves();
+    }
   }
 
   function resetFilters() {
